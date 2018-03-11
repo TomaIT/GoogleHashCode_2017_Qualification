@@ -186,6 +186,10 @@ void update_serverVideo_Gain(Item item){
                 serverVideo_Gain[endp[i].idCache[k]][item->idVideo]-=
                         (double)endp[i].video[item->idVideo]*(endp[i].ldc-endp[i].cache[endp[i].idCache[k]]);
                 serverVideoChanged[endp[i].idCache[k]][item->idVideo]=1;
+                /*Qui considero il guadagno relativo rispetto al link con tempo di latenza che non è minimo*/
+                if(endp[i].cache[item->idServer]>endp[i].cache[endp[i].idCache[k]])
+                    serverVideo_Gain[endp[i].idCache[k]][item->idVideo]+=
+                            (double)endp[i].video[item->idVideo]*(endp[i].cache[item->idServer]-endp[i].cache[endp[i].idCache[k]]);
             }
     }
 }
