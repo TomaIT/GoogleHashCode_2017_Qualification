@@ -47,10 +47,11 @@ void print_solution(FILE *f);
 float get_score();
 void free_all();
 
+void prova();
+
 int main(int argc,char **argv){
     int i;
-    FILE *fout;
-    char nameFOut[300];
+
     float score,scoreTot=0;
     for(i=1;i<argc;i++){
         printf("File: %s\n",argv[i]);
@@ -61,11 +62,13 @@ int main(int argc,char **argv){
         calcola_serverVideo_Gain();
         insert_in_pqueue();
         insert_video_updating_in_server_from_pqueue();
+
+        prova();
+
+
         score=get_score()*1000;
-        sprintf(nameFOut,"%s_%d.sol",argv[i],(int)score);
-        fout=fopen(nameFOut,"w");
-        print_solution(fout);
-        fclose(fout);
+
+
         printf("Score: %.1f\n",score);
         scoreTot+=score;
         free_all();
@@ -73,6 +76,82 @@ int main(int argc,char **argv){
     }
     printf("\nScoreTot: %.1f\n",scoreTot);
     return 0;
+}
+
+void prova(){
+    int i,j,k,z,mL,idSmin;
+    uint64_t **peso;
+label:
+    peso=malloc(sizeof(uint64_t *)*nServer);
+    for(i=0;i<nServer;i++)
+        peso[i]=calloc(sizeof(uint64_t),nVideo);
+
+
+    //Calcolo contributo al punteggio finale di ogni coppia server-video
+    for(i=0;i<nEndp;i++){
+        for(j=0;j<endp[i].sizeVideo;j++){
+            idSmin=-1;
+            mL=endp[i].ldc;
+            for(k=0;k<endp[i].sizeCache;k++){
+                if((server[endp[i].idCache[k]].flagVideo[endp[i].idVideo[j]])&&(mL>endp[i].cache[endp[i].idCache[k]])){
+                    mL=endp[i].cache[endp[i].idCache[k]];
+                    idSmin=endp[i].idCache[k];
+                }
+            }
+            if(idSmin!=-1)
+                peso[idSmin][endp[i].idVideo[j]]+=(uint64_t )endp[i].video[endp[i].idVideo[j]]*(endp[i].ldc-mL);
+        }
+    }
+
+    //Tolgo la coppia video-server se questa ha un contributo al punteggio finale pari a zero
+    for(i=0;i<nServer;i++){
+        for(j=0;j<nVideo;j++){
+            if(server[i].flagVideo[j]&&peso[i][j]<=0){//tolgo il video dal server
+                //printf("%d-%d\n",i,j);
+                server[i].flagVideo[j]=0;
+                server[i].cap+=video[j];
+                for(k=server[i].sizeIdVideo-1;k>=0;k--){
+                    if(server[i].idVideo[k]==j){
+                        for(z=k;z<server[i].sizeIdVideo-1;z++)
+                            server[i].idVideo[z]=server[i].idVideo[z+1];
+                        server[i].sizeIdVideo--;
+                        break;
+                    }
+                }
+            }
+        }
+    }
+
+    //Tolgo le coppie server-video che non ci stanno più (MB) nei server
+    for(i=0;i<nServer;i++)
+        for(j=0;j<nVideo;j++)
+            if(server[i].cap<video[j])
+                flagServerVideo[i][j]=1;
+
+    //Assegno a "caso" le coppie server-video
+    for(i=0;i<nServer;i++)
+        for(j=0;j<nVideo;j++)
+            if(!flagServerVideo[i][j]&&server[i].cap>=video[j]){
+                flagServerVideo[i][j]=1;
+                server[i].idVideo[server[i].sizeIdVideo]=j;
+                server[i].flagVideo[j]=1;
+                server[i].sizeIdVideo++;
+                server[i].cap-=video[j];
+            }
+
+
+    for(i=0,k=0;i<nServer;i++)
+        for(j=0;j<nVideo;j++)
+            if(!flagServerVideo[i][j])
+                k++;
+
+
+
+    for(i=0;i<nServer;i++)
+        free(peso[i]);
+    free(peso);
+    if(k)
+        goto label;
 }
 
 
@@ -204,6 +283,14 @@ void insert_video_updating_in_server_from_pqueue(){
             item=pqueue_extract(pq);
             flagServerVideo[item->idServer][item->idVideo]=1;
         }while(server[item->idServer].cap<video[item->idVideo]);
+        /*Qui se il peso è minore o uguale a zero ritorno, perchè il contributo è trascurabile,
+         * meglio adottare un altra strategia !!
+         */
+        if(item->key<=0){
+            pqueue_insert(pq,item);
+            flagServerVideo[item->idServer][item->idVideo]=0;
+            return;
+        }
         server[item->idServer].idVideo[server[item->idServer].sizeIdVideo]=item->idVideo;
         server[item->idServer].flagVideo[item->idVideo]=1;
         server[item->idServer].sizeIdVideo++;
